@@ -17,6 +17,7 @@ engine = create_engine(
 Base = declarative_base()
 
 from .user import User
+from .store import Store
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
