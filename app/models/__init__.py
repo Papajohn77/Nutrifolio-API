@@ -18,6 +18,8 @@ Base = declarative_base()
 
 from .user import User
 from .store import Store
+from .product import Product
+from .product_details import ProductDetails
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

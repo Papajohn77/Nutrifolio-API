@@ -12,3 +12,10 @@ class Store(Base):
     location = Column(String, nullable=False)
     lat = Column(Float, nullable=False)
     lng = Column(Float, nullable=False)
+
+    products = relationship(
+        "Product",
+        back_populates="store",
+        order_by="desc(Product.category)",
+        cascade="all, delete"
+    )

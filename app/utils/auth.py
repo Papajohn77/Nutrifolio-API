@@ -4,8 +4,7 @@ from sqlalchemy.orm import Session
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from app.models import get_db
-from app.models.user import User as user_model
-from app.schemas.user import TokenData
+from app.models.user import User
 from .config import settings
 
 
@@ -36,8 +35,7 @@ def verify_access_token(token: str):
                 headers={"WWW-Authenticate":"Bearer"}
             )
 
-        token_data = TokenData(id=user_id)
-        return token_data
+        return user_id
     except JWTError:
         raise HTTPException(
             status_code=401,
@@ -48,6 +46,6 @@ def verify_access_token(token: str):
 
 def get_current_user(token: str = Depends(oauth2_scheme),
         db: Session = Depends(get_db)):
-    token = verify_access_token(token)
-    db_user = db.query(user_model).filter(user_model.id == token.id).first()
+    user_id = verify_access_token(token)
+    db_user = db.query(User).filter(User.id == user_id).first()
     return db_user

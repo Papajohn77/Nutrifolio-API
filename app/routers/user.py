@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 from app.models import get_db
 from app.models.user import User
-from app.schemas.user import UserOut, UserCreate, Token
+from app.schemas import UserOut, UserCreate, Token
 from app.utils import auth
 
 
@@ -59,12 +59,10 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-def get_users(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(User).offset(skip).limit(limit).all()
-
-
-@users.get("/users", response_model=list[UserOut])
-def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db),
+@users.get("/users/{id}", response_model=UserOut)
+def read_user(id: int, db: Session = Depends(get_db),
         current_user = Depends(auth.get_current_user)):
-    users = get_users(db, skip=skip, limit=limit)
-    return users
+    if current_user.id != id:
+        raise HTTPException(
+            status_code=403, detail="Can not access other users' data")
+    return current_user
