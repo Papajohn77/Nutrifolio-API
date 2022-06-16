@@ -1,4 +1,3 @@
-import logging
 from fastapi import FastAPI
 from fastapi_utils.tasks import repeat_every
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,14 +7,6 @@ from app.routers.store import stores
 from app.routers.product import products
 from app.models import SessionLocal
 from app.models.recents import recents
-
-
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(name)s')
-handler = logging.FileHandler('/backend/logs/main.txt')
-handler.setFormatter(formatter)
-
-exception_logger = logging.getLogger(__name__)
-exception_logger.addHandler(handler)
 
 
 app = FastAPI()
@@ -46,4 +37,4 @@ def delete_expired_recents():
             )
             db.commit()
     except Exception as exc:
-        exception_logger.exception(exc)
+        print(exc)
