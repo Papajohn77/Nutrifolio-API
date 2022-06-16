@@ -60,8 +60,7 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
 
 
 @users.get("/users/{id}", response_model=UserOut)
-def read_user(id: int, db: Session = Depends(get_db),
-        current_user = Depends(auth.get_current_user)):
+def read_user(id: int, current_user = Depends(auth.get_current_user)):
     if current_user.id != id:
         raise HTTPException(
             status_code=403, detail="Can not access other users' data")

@@ -1,9 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
+from datetime import datetime
 from app.models import get_db
 from app.models.product import Product
 from app.models.product_details import ProductDetails
-from app.schemas import ProductOutSimple, ProductOutDetailed, ProductCreate, ProductDetailsOut, ProductDetailsCreate, ProductOutStore
+from app.models.recents import recents
+from app.models.favorites import favorites
+from app.schemas import ProductOutSimple, ProductOutDetailed, ProductCreate, ProductDetailsOut, ProductDetailsCreate, ProductOutStore, FavoritesOut, RecentsOut, FavoritesCreate, RecentsCreate
+from app.utils import auth
 
 
 products = APIRouter(
@@ -23,9 +27,104 @@ def read_product(id: int, db: Session = Depends(get_db)):
 
     if db_product.details is None:
         raise HTTPException(
-            status_code=500, detail="Nutritional values missing...")
+            status_code=500, detail="Product details missing")
 
     return db_product
+
+
+
+@products.get("/favorites", response_model=FavoritesOut)
+def read_favorites(current_user = Depends(auth.get_current_user)):
+    return current_user
+
+
+@products.get("/recents", response_model=RecentsOut)
+def read_recents(current_user = Depends(auth.get_current_user)):
+    return current_user
+
+
+def insert_favorite(db: Session, user_id: int, product_id: int):
+    db.execute(favorites.insert().values(
+        user_id=user_id, product_id=product_id
+    ))
+    db.commit()
+
+
+@products.post("/favorites", status_code=201)
+def create_favorite(body: FavoritesCreate, db: Session = Depends(get_db),
+        current_user = Depends(auth.get_current_user)):
+    db_favorite = db.execute(
+        favorites.select()
+            .where(favorites.c.user_id == current_user.id)
+            .where(favorites.c.product_id == body.product_id)
+    ).first()
+
+    if db_favorite:
+        raise HTTPException(
+            status_code=409, detail="Product already in favorites")
+
+    insert_favorite(db, current_user.id, body.product_id)
+    return {"ok": True}
+
+
+def del_favorite(db: Session, user_id: int, product_id: int):
+    db.execute(
+        favorites.delete()
+            .where(favorites.c.user_id == user_id)
+            .where(favorites.c.product_id == product_id)
+    )
+    db.commit()
+
+
+@products.delete("/favorites/{product_id}", status_code=204)
+def delete_favorite(product_id: int, db: Session = Depends(get_db),
+        current_user = Depends(auth.get_current_user)):
+    db_favorite = db.execute(
+        favorites.select()
+            .where(favorites.c.user_id == current_user.id)
+            .where(favorites.c.product_id == product_id)
+    ).first()
+
+    if not db_favorite:
+        raise HTTPException(
+            status_code=409, detail="Product not in favorites")
+
+    del_favorite(db, current_user.id, product_id)
+    return Response(status_code=204)
+
+
+def insert_recent(db: Session, user_id: int, product_id: int):
+    db.execute(recents.insert().values(
+        user_id=user_id, product_id=product_id
+    ))
+    db.commit()
+
+
+def upd_recent(db: Session, user_id: int, product_id: int):
+    db.execute(
+        recents.update()
+            .where(recents.c.user_id == user_id)
+            .where(recents.c.product_id == product_id)
+            .values(created_at=datetime.utcnow())
+    )
+    db.commit()
+
+
+@products.post("/recents", status_code=201)
+def create_recent(body: RecentsCreate, db: Session = Depends(get_db),
+        current_user = Depends(auth.get_current_user)):
+    db_recent = db.execute(
+        recents.select()
+            .where(recents.c.user_id == current_user.id)
+            .where(recents.c.product_id == body.product_id)
+    ).first()
+
+    if not db_recent:
+        insert_recent(db, current_user.id, body.product_id)
+    else:
+        upd_recent(db, current_user.id, body.product_id)
+
+    return {"ok": True}
 
 
 def get_products(db: Session, skip: int = 0, limit: int = 100):

@@ -112,3 +112,25 @@ class ProductOutDetailed(ProductBase):
 
     class Config:
         orm_mode = True
+
+
+class FavoritesOut(BaseModel):
+    favorites: list[ProductOutSimple]
+
+    class Config:
+        orm_mode = True
+
+
+class FavoritesCreate(BaseModel):
+    product_id: int
+
+
+class RecentsOut(BaseModel):
+    recents: list[ProductOutSimple]
+
+    class Config:
+        orm_mode = True
+
+
+class RecentsCreate(BaseModel):
+    product_id: int

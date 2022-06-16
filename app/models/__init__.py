@@ -22,6 +22,8 @@ from .product import Product
 from .product_details import ProductDetails
 from .tag import Tag
 from .product_tag import product_tag
+from .recents import recents
+from .favorites import favorites
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
