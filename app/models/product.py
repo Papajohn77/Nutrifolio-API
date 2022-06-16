@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, Numeric, ForeignKey
 from sqlalchemy.orm import relationship
 from . import Base
+from .product_tag import product_tag
 
 
 class Product(Base):
@@ -18,3 +19,6 @@ class Product(Base):
 
     details = relationship("ProductDetails", uselist=False)
     store = relationship("Store", back_populates="products")
+    tags = relationship(
+        "Tag", secondary=product_tag, back_populates="products"
+    )

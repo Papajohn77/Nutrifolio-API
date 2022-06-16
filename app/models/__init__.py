@@ -20,6 +20,8 @@ from .user import User
 from .store import Store
 from .product import Product
 from .product_details import ProductDetails
+from .tag import Tag
+from .product_tag import product_tag
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
