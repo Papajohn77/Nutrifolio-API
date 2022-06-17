@@ -134,3 +134,50 @@ class RecentsOut(BaseModel):
 
 class RecentsCreate(BaseModel):
     product_id: int
+
+
+class Filters(BaseModel):
+    lat: float
+    lng: float
+    categories: Optional[tuple[str, ...]] = None
+    max_dist: Optional[float] = None
+    min_price: Optional[float] = None
+    max_price: Optional[float] = None
+    min_calories: Optional[int] = None
+    max_calories: Optional[int] = None
+    min_protein: Optional[int] = None
+    max_protein: Optional[int] = None
+    min_carbs: Optional[int] = None
+    max_carbs: Optional[int] = None
+    min_fat: Optional[int] = None
+    max_fat: Optional[int] = None
+    sort_by: Optional[str] = None
+    ordering: Optional[str] = None
+
+    @validator('categories')
+    def categories_validation(cls, categories):
+        valid_categories = [
+            'Vegan', 'Vegeterian', 'Sugar Free',
+            'Gluten Free', 'Lactose Free', 'Pescatarian'
+        ]
+
+        for categ in categories:
+            if categ not in valid_categories:
+                raise ValueError('Invalid categories')
+        return categories
+
+    @validator('sort_by')
+    def sort_by_validation(cls, sort_by):
+        valid_sort_by = ['price', 'distance', 'calories', 'protein']
+
+        if sort_by not in valid_sort_by:
+            raise ValueError('Invalid sort_by')
+        return sort_by
+
+    @validator('ordering')
+    def ordering_validation(cls, ordering):
+        valid_orderings = ['ASC', 'DESC']
+
+        if ordering not in valid_orderings:
+            raise ValueError('Invalid ordering')
+        return ordering

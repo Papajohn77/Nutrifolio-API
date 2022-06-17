@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 from datetime import datetime
 from app.models import get_db
@@ -6,7 +7,7 @@ from app.models.product import Product
 from app.models.product_details import ProductDetails
 from app.models.recents import recents
 from app.models.favorites import favorites
-from app.schemas import ProductOutSimple, ProductOutDetailed, ProductCreate, ProductDetailsOut, ProductDetailsCreate, ProductOutStore, FavoritesOut, RecentsOut, FavoritesCreate, RecentsCreate
+from app.schemas import ProductOutSimple, ProductOutDetailed, ProductCreate, ProductDetailsOut, ProductDetailsCreate, ProductOutStore, FavoritesOut, RecentsOut, FavoritesCreate, RecentsCreate, Filters
 from app.utils import auth
 
 
@@ -125,6 +126,94 @@ def create_recent(body: RecentsCreate, db: Session = Depends(get_db),
         upd_recent(db, current_user.id, body.product_id)
 
     return {"ok": True}
+
+
+@products.post("/filter")
+def filter_products(filters: Filters, skip: int = 0, 
+        limit: int = 100, db: Session = Depends(get_db)):
+    stmt = (
+        select(text("""
+            p.id, p.name, description, price, calories, image_url, 
+            distance, s.id, s.name, logo_url
+        """))
+        .select_from(text("""
+            (SELECT *,
+                (
+                    (
+                        (
+                            acos(
+                                sin((:lat * pi() / 180))
+                                *
+                                sin((s.lat * pi() / 180))
+                                +
+                                cos((:lat * pi() / 180))
+                                *
+                                cos((s.lat * pi() / 180))
+                                *
+                                cos(((:lng - s.lng) * pi() / 180)))
+                        ) * 180 / pi()
+                    ) * 60 * 1.1515 * 1.609344
+                ) AS distance FROM stores AS s
+            ) AS s
+        """))
+        .select_from(text('products AS p'))
+        .select_from(text('product_details AS pd'))
+        .where(text('s.id = p.store_id'))
+        .where(text('p.id = pd.product_id'))
+    )
+
+    if filters.max_dist is not None:
+        stmt = stmt.where(text('distance <= :max_dist'))
+
+    if filters.min_price is not None and filters.max_price is not None:
+        stmt = stmt.where(text('(price BETWEEN :min_price AND :max_price)'))
+
+    if filters.min_calories is not None and filters.max_calories is not None:
+        stmt = stmt.where(text('(calories BETWEEN :min_calories AND :max_calories)'))
+
+    if filters.min_protein is not None and filters.max_protein is not None:
+        stmt = stmt.where(text('(protein BETWEEN :min_protein AND :max_protein)'))
+
+    if filters.min_carbs is not None and filters.max_carbs is not None:
+        stmt = stmt.where(text('(carbohydrates BETWEEN :min_carbs AND :max_carbs)'))
+
+    if filters.min_fat is not None and filters.max_fat is not None:
+        stmt = stmt.where(text('(fat BETWEEN :min_fat AND :max_fat)'))
+
+    if filters.categories is not None:
+        stmt = (stmt.select_from(text('product_tag AS pt'))
+                    .select_from(text('tags AS t'))
+                    .where(text('p.id = pt.product_id'))
+                    .where(text('pt.tag_id = t.id'))
+                    .where(text('label IN :categories'))
+        )
+
+    if filters.sort_by is not None and filters.ordering is not None:
+        stmt = stmt.order_by(text(f'{filters.sort_by} {filters.ordering}'))
+
+    stmt = stmt.limit(limit).offset(skip)
+
+    db_products = db.execute(stmt, dict(filters)).fetchall()
+    distinct_db_products = list(dict.fromkeys(db_products)) # Preserves order
+
+    response = []
+    for p_id, p_name, description, price, calories, image_url, \
+            distance, s_id, s_name, logo_url in distinct_db_products:
+        response.append({
+            "id": p_id,
+            "name": p_name,
+            "description": description,
+            "price": price,
+            "calories": calories,
+            "image_url": image_url,
+            "distance": distance,
+            "store": {
+                "id": s_id,
+                "name": s_name,
+                "logo_url": logo_url
+            }
+        })
+    return {"products": response}
 
 
 def get_products(db: Session, skip: int = 0, limit: int = 100):

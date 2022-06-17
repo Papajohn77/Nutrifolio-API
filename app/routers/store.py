@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 from app.models import get_db
 from app.models.store import Store
@@ -20,6 +21,38 @@ def read_store(id: int, db: Session = Depends(get_db)):
     if not db_store:
         raise HTTPException(status_code=404, detail="Store not found")
     return db_store
+
+
+@stores.get("/search")
+def search_stores(q: str, lat: float, lng: float, skip: int = 0, 
+        limit: int = 100, db: Session = Depends(get_db)):
+    stmt = text("""
+        SELECT * 
+        FROM (SELECT *, 
+                (
+                    (
+                        (
+                            acos(
+                                sin((:lat * pi() / 180))
+                                *
+                                sin((s.lat * pi() / 180))
+                                +
+                                cos((:lat * pi() / 180))
+                                *
+                                cos((s.lat * pi() / 180))
+                                *
+                                cos(((:lng - s.lng) * pi() / 180)))
+                        ) * 180 / pi()
+                    ) * 60 * 1.1515 * 1.609344
+                ) AS distance FROM stores AS s
+        ) AS stores_with_dist
+        WHERE distance <= 3 AND name ILIKE :q
+        LIMIT :limit OFFSET :skip
+    """)
+
+    params = {"q": f'%{q}%', "lat": lat, "lng": lng, "limit": limit, "skip": skip}
+    near_stores = db.execute(stmt, params).fetchall()
+    return {"stores": near_stores}
 
 
 def get_stores(db: Session, skip: int = 0, limit: int = 100):
