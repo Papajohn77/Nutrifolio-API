@@ -16,22 +16,35 @@ products = APIRouter(
 )
 
 
+class ProductDoesNotExist(Exception):
+    pass
+
+
+class ProductDetailsMissing(Exception):
+    pass
+
+
 def get_product_by_id(db: Session, product_id: int):
     return db.query(Product).filter(Product.id == product_id).first()
 
 
 @products.get("/products/{id}", response_model=ProductOutDetailed)
 def read_product(id: int, db: Session = Depends(get_db)):
-    db_product = get_product_by_id(db, product_id=id)
-    if not db_product:
-        raise HTTPException(status_code=404, detail="Product not found")
+    try:
+        db_product = get_product_by_id(db, product_id=id)
+        if not db_product:
+            raise ProductDoesNotExist("Product not found.")
 
-    if db_product.details is None:
-        raise HTTPException(
-            status_code=500, detail="Product details missing")
+        if not db_product.details:
+            raise ProductDetailsMissing("Product details missing.")
 
-    return db_product
-
+        return db_product
+    except ProductDoesNotExist as error:
+        raise HTTPException(status_code=404, detail=str(error))
+    except ProductDetailsMissing as error:
+        raise HTTPException(status_code=500, detail=str(error))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to load product.")
 
 
 @products.get("/favorites", response_model=FavoritesOut)
@@ -44,28 +57,45 @@ def read_recents(current_user = Depends(auth.get_current_user)):
     return current_user
 
 
+class ProductAlreadyInFavorites(Exception):
+    pass
+
+
+def get_favorite(db: Session, user_id: int, product_id: int):
+    db_favorite = db.execute(
+        favorites.select()
+            .where(favorites.c.user_id == user_id)
+            .where(favorites.c.product_id == product_id)
+    ).first()
+
+    return db_favorite
+
+
 def insert_favorite(db: Session, user_id: int, product_id: int):
-    db.execute(favorites.insert().values(
-        user_id=user_id, product_id=product_id
-    ))
+    db.execute(
+        favorites.insert().values(user_id=user_id, product_id=product_id)
+    )
     db.commit()
 
 
 @products.post("/favorites", status_code=201)
 def create_favorite(body: FavoritesCreate, db: Session = Depends(get_db),
         current_user = Depends(auth.get_current_user)):
-    db_favorite = db.execute(
-        favorites.select()
-            .where(favorites.c.user_id == current_user.id)
-            .where(favorites.c.product_id == body.product_id)
-    ).first()
+    try:
+        db_favorite = get_favorite(db, current_user.id, body.product_id)
+        if db_favorite:
+            raise ProductAlreadyInFavorites("Product already in favorites.")
 
-    if db_favorite:
-        raise HTTPException(
-            status_code=409, detail="Product already in favorites")
+        insert_favorite(db, current_user.id, body.product_id)
+        return {"detail": "Successfully added to favorites."}
+    except ProductAlreadyInFavorites as error:
+        raise HTTPException(status_code=409, detail=str(error))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to create favorite.")
 
-    insert_favorite(db, current_user.id, body.product_id)
-    return {"ok": True}
+
+class ProductNotInFavorites(Exception):
+    pass
 
 
 def del_favorite(db: Session, user_id: int, product_id: int):
@@ -80,24 +110,23 @@ def del_favorite(db: Session, user_id: int, product_id: int):
 @products.delete("/favorites/{product_id}", status_code=204)
 def delete_favorite(product_id: int, db: Session = Depends(get_db),
         current_user = Depends(auth.get_current_user)):
-    db_favorite = db.execute(
-        favorites.select()
-            .where(favorites.c.user_id == current_user.id)
-            .where(favorites.c.product_id == product_id)
-    ).first()
+    try:
+        db_favorite = get_favorite(db, current_user.id, body.product_id)
+        if not db_favorite:
+            raise ProductNotInFavorites("Product not in favorites.")
 
-    if not db_favorite:
-        raise HTTPException(
-            status_code=409, detail="Product not in favorites")
-
-    del_favorite(db, current_user.id, product_id)
-    return Response(status_code=204)
+        del_favorite(db, current_user.id, product_id)
+        return Response(status_code=204)
+    except ProductNotInFavorites as error:
+        raise HTTPException(status_code=409, detail=str(error))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to delete favorite.")
 
 
 def insert_recent(db: Session, user_id: int, product_id: int):
-    db.execute(recents.insert().values(
-        user_id=user_id, product_id=product_id
-    ))
+    db.execute(
+        recents.insert().values(user_id=user_id, product_id=product_id)
+    )
     db.commit()
 
 
@@ -114,106 +143,113 @@ def upd_recent(db: Session, user_id: int, product_id: int):
 @products.post("/recents", status_code=201)
 def create_recent(body: RecentsCreate, db: Session = Depends(get_db),
         current_user = Depends(auth.get_current_user)):
-    db_recent = db.execute(
-        recents.select()
-            .where(recents.c.user_id == current_user.id)
-            .where(recents.c.product_id == body.product_id)
-    ).first()
+    try:
+        db_recent = db.execute(
+            recents.select()
+                .where(recents.c.user_id == current_user.id)
+                .where(recents.c.product_id == body.product_id)
+        ).first()
 
-    if not db_recent:
-        insert_recent(db, current_user.id, body.product_id)
-    else:
-        upd_recent(db, current_user.id, body.product_id)
+        if not db_recent:
+            insert_recent(db, current_user.id, body.product_id)
+        else:
+            upd_recent(db, current_user.id, body.product_id)
 
-    return {"ok": True}
+        return {"detail": "Successfully added to recents."}
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to create recent.")
 
 
 @products.post("/filter")
 def filter_products(filters: Filters, skip: int = 0, 
         limit: int = 100, db: Session = Depends(get_db)):
-    stmt = (
-        select(text("""
-            p.id, p.name, description, price, calories, image_url, 
-            distance, s.id, s.name, logo_url
-        """))
-        .select_from(text("""
-            (SELECT *,
-                (
+    try:
+        stmt = (
+            select(text("""
+                p.id, p.name, description, price, calories, image_url, 
+                distance, s.id, s.name, logo_url
+            """))
+            .select_from(text("""
+                (SELECT *,
                     (
                         (
-                            acos(
-                                sin((:lat * pi() / 180))
-                                *
-                                sin((s.lat * pi() / 180))
-                                +
-                                cos((:lat * pi() / 180))
-                                *
-                                cos((s.lat * pi() / 180))
-                                *
-                                cos(((:lng - s.lng) * pi() / 180)))
-                        ) * 180 / pi()
-                    ) * 60 * 1.1515 * 1.609344
-                ) AS distance FROM stores AS s
-            ) AS s
-        """))
-        .select_from(text('products AS p'))
-        .select_from(text('product_details AS pd'))
-        .where(text('s.id = p.store_id'))
-        .where(text('p.id = pd.product_id'))
-    )
-
-    if filters.max_dist is not None:
-        stmt = stmt.where(text('distance <= :max_dist'))
-
-    if filters.min_price is not None and filters.max_price is not None:
-        stmt = stmt.where(text('(price BETWEEN :min_price AND :max_price)'))
-
-    if filters.min_calories is not None and filters.max_calories is not None:
-        stmt = stmt.where(text('(calories BETWEEN :min_calories AND :max_calories)'))
-
-    if filters.min_protein is not None and filters.max_protein is not None:
-        stmt = stmt.where(text('(protein BETWEEN :min_protein AND :max_protein)'))
-
-    if filters.min_carbs is not None and filters.max_carbs is not None:
-        stmt = stmt.where(text('(carbohydrates BETWEEN :min_carbs AND :max_carbs)'))
-
-    if filters.min_fat is not None and filters.max_fat is not None:
-        stmt = stmt.where(text('(fat BETWEEN :min_fat AND :max_fat)'))
-
-    if filters.categories is not None:
-        stmt = (stmt.select_from(text('product_tag AS pt'))
-                    .select_from(text('tags AS t'))
-                    .where(text('p.id = pt.product_id'))
-                    .where(text('pt.tag_id = t.id'))
-                    .where(text('label IN :categories'))
+                            (
+                                acos(
+                                    sin((:lat * pi() / 180))
+                                    *
+                                    sin((s.lat * pi() / 180))
+                                    +
+                                    cos((:lat * pi() / 180))
+                                    *
+                                    cos((s.lat * pi() / 180))
+                                    *
+                                    cos(((:lng - s.lng) * pi() / 180))
+                                )
+                            ) * 180 / pi()
+                        ) * 60 * 1.1515 * 1.609344
+                    ) AS distance FROM stores AS s
+                ) AS s
+            """))
+            .select_from(text('products AS p'))
+            .select_from(text('product_details AS pd'))
+            .where(text('s.id = p.store_id'))
+            .where(text('p.id = pd.product_id'))
         )
 
-    if filters.sort_by is not None and filters.ordering is not None:
-        stmt = stmt.order_by(text(f'{filters.sort_by} {filters.ordering}'))
+        if filters.max_dist is not None:
+            stmt = stmt.where(text('distance <= :max_dist'))
 
-    stmt = stmt.limit(limit).offset(skip)
+        if filters.min_price is not None and filters.max_price is not None:
+            stmt = stmt.where(text('(price BETWEEN :min_price AND :max_price)'))
 
-    db_products = db.execute(stmt, dict(filters)).fetchall()
-    distinct_db_products = list(dict.fromkeys(db_products)) # Preserves order
+        if filters.min_calories is not None and filters.max_calories is not None:
+            stmt = stmt.where(text('(calories BETWEEN :min_calories AND :max_calories)'))
 
-    response = []
-    for p_id, p_name, description, price, calories, image_url, \
-            distance, s_id, s_name, logo_url in distinct_db_products:
-        response.append({
-            "id": p_id,
-            "name": p_name,
-            "description": description,
-            "price": price,
-            "calories": calories,
-            "image_url": image_url,
-            "distance": distance,
-            "store": {
-                "id": s_id,
-                "name": s_name,
-                "logo_url": logo_url
-            }
-        })
-    return {"products": response}
+        if filters.min_protein is not None and filters.max_protein is not None:
+            stmt = stmt.where(text('(protein BETWEEN :min_protein AND :max_protein)'))
+
+        if filters.min_carbs is not None and filters.max_carbs is not None:
+            stmt = stmt.where(text('(carbohydrates BETWEEN :min_carbs AND :max_carbs)'))
+
+        if filters.min_fat is not None and filters.max_fat is not None:
+            stmt = stmt.where(text('(fat BETWEEN :min_fat AND :max_fat)'))
+
+        if filters.categories is not None:
+            stmt = (stmt.select_from(text('product_tag AS pt'))
+                        .select_from(text('tags AS t'))
+                        .where(text('p.id = pt.product_id'))
+                        .where(text('pt.tag_id = t.id'))
+                        .where(text('label IN :categories'))
+            )
+
+        if filters.sort_by is not None and filters.ordering is not None:
+            stmt = stmt.order_by(text(f'{filters.sort_by} {filters.ordering}'))
+
+        stmt = stmt.limit(limit).offset(skip)
+
+        db_products = db.execute(stmt, dict(filters)).fetchall()
+        distinct_db_products = list(dict.fromkeys(db_products)) # Preserves order
+
+        response = []
+        for p_id, p_name, description, price, calories, image_url, \
+                distance, s_id, s_name, logo_url in distinct_db_products:
+            response.append({
+                "id": p_id,
+                "name": p_name,
+                "description": description,
+                "price": price,
+                "calories": calories,
+                "image_url": image_url,
+                "distance": distance,
+                "store": {
+                    "id": s_id,
+                    "name": s_name,
+                    "logo_url": logo_url
+                }
+            })
+        return {"products": response}
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to filter products.")
 
 
 def get_products(db: Session, skip: int = 0, limit: int = 100):

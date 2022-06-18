@@ -1,5 +1,6 @@
 from typing import Optional
-from pydantic import BaseModel, EmailStr, validator
+from pydantic import BaseModel, validator
+from email_validator import validate_email, EmailNotValidError
 
 
 class Token(BaseModel):
@@ -10,23 +11,39 @@ class Token(BaseModel):
 class UserBase(BaseModel):
     first_name: str
     last_name: str
-    email: EmailStr
+    email: str
 
 
 class UserCreate(UserBase):
     password: str
     conf_password: str
 
+    @validator('first_name')
+    def first_name_validation(cls, first_name):
+        if not first_name:
+            raise ValueError('First Name is required.')
+
+    @validator('last_name')
+    def last_name_validation(cls, last_name):
+        if not last_name:
+            raise ValueError('Last Name is required.')
+
+    @validator('email')
+    def email_validation(cls, email):
+        validate_email(email)
+        return email
+
     @validator('password')
     def password_strength(cls, password):
         if len(password) < 12:
-            raise ValueError('Weak password: Should be at least 12 characters long')
+            raise ValueError(
+                'Weak password: Should be at least 12 characters long.')
         return password
 
     @validator('conf_password')
     def passwords_match(cls, conf_password, values, **kwargs):
         if 'password' in values and conf_password != values['password']:
-            raise ValueError('Passwords do not match')
+            raise ValueError('Passwords do not match.')
         return conf_password
 
 

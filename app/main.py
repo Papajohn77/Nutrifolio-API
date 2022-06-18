@@ -1,4 +1,7 @@
 from fastapi import FastAPI
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from fastapi_utils.tasks import repeat_every
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timedelta
@@ -22,6 +25,16 @@ app.add_middleware(
 app.include_router(users)
 app.include_router(stores)
 app.include_router(products)
+
+
+@app.exception_handler(RequestValidationError)
+def validation_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=400,
+        content=jsonable_encoder(
+            {"detail": [error["msg"] for error in exc.errors()]}
+        )
+    )
 
 
 @app.on_event("startup")

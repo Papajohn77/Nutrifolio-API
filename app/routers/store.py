@@ -11,48 +11,68 @@ stores = APIRouter(
 )
 
 
+class StoreDoesNotExist(Exception):
+    pass
+
+
 def get_store_by_id(db: Session, store_id: int):
     return db.query(Store).filter(Store.id == store_id).first()
 
 
 @stores.get("/stores/{id}", response_model=StoreOut)
 def read_store(id: int, db: Session = Depends(get_db)):
-    db_store = get_store_by_id(db, store_id=id)
-    if not db_store:
-        raise HTTPException(status_code=404, detail="Store not found")
-    return db_store
+    try:
+        db_store = get_store_by_id(db, store_id=id)
+        if not db_store:
+            raise StoreDoesNotExist("Store not found.")
+        return db_store
+    except StoreDoesNotExist as error:
+        raise HTTPException(status_code=404, detail=str(error))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to load store.")
 
 
 @stores.get("/search")
-def search_stores(q: str, lat: float, lng: float, skip: int = 0, 
-        limit: int = 100, db: Session = Depends(get_db)):
-    stmt = text("""
-        SELECT * 
-        FROM (SELECT *, 
-                (
+def search_stores(q: str, lat: float, lng: float, distance: float = 3,
+        skip: int = 0,  limit: int = 100, db: Session = Depends(get_db)):
+    try:
+        stmt = text("""
+            SELECT * 
+            FROM (SELECT *, 
                     (
                         (
-                            acos(
-                                sin((:lat * pi() / 180))
-                                *
-                                sin((s.lat * pi() / 180))
-                                +
-                                cos((:lat * pi() / 180))
-                                *
-                                cos((s.lat * pi() / 180))
-                                *
-                                cos(((:lng - s.lng) * pi() / 180)))
-                        ) * 180 / pi()
-                    ) * 60 * 1.1515 * 1.609344
-                ) AS distance FROM stores AS s
-        ) AS stores_with_dist
-        WHERE distance <= 3 AND name ILIKE :q
-        LIMIT :limit OFFSET :skip
-    """)
+                            (
+                                acos(
+                                    sin((:lat * pi() / 180))
+                                    *
+                                    sin((s.lat * pi() / 180))
+                                    +
+                                    cos((:lat * pi() / 180))
+                                    *
+                                    cos((s.lat * pi() / 180))
+                                    *
+                                    cos(((:lng - s.lng) * pi() / 180))
+                                )
+                            ) * 180 / pi()
+                        ) * 60 * 1.1515 * 1.609344
+                    ) AS distance FROM stores AS s
+            ) AS stores_with_dist
+            WHERE distance <= :distance AND name ILIKE :q
+            LIMIT :limit OFFSET :skip
+        """)
 
-    params = {"q": f'%{q}%', "lat": lat, "lng": lng, "limit": limit, "skip": skip}
-    near_stores = db.execute(stmt, params).fetchall()
-    return {"stores": near_stores}
+        params = {
+            "q": f'%{q}%',
+            "lat": lat,
+            "lng": lng,
+            "distance": distance,
+            "limit": limit,
+            "skip": skip
+        }
+        near_stores = db.execute(stmt, params).fetchall()
+        return {"stores": near_stores}
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to search stores.")
 
 
 def get_stores(db: Session, skip: int = 0, limit: int = 100):
@@ -81,7 +101,7 @@ def insert_store(db: Session, store: StoreBase):
 def create_store(store: StoreBase, db: Session = Depends(get_db)):
     db_store = get_store_by_name(db, store.name)
     if db_store:
-        raise HTTPException(status_code=400, detail="Store name already taken")
+        raise HTTPException(status_code=409, detail="Store name already used.")
 
     new_store = insert_store(db=db, store=store)
     return new_store
