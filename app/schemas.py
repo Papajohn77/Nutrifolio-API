@@ -77,15 +77,23 @@ class ProductBase(BaseModel):
     image_url: str
     calories: int
     price: float
-    category: str
 
 
 class ProductCreate(ProductBase):
+    category: str
     store_id: int
 
 
 class ProductOutStore(ProductBase):
     id: int
+
+    class Config:
+        orm_mode = True
+
+
+class CategoryProducts(BaseModel):
+    category: str
+    products: list[ProductOutStore] = []
 
     class Config:
         orm_mode = True
@@ -101,7 +109,7 @@ class StoreBase(BaseModel):
 
 class StoreOut(StoreBase):
     id: int
-    products: list[ProductOutStore] = []
+    products: list[CategoryProducts] = []
 
     class Config:
         orm_mode = True
