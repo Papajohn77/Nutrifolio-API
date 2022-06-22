@@ -78,7 +78,7 @@ def insert_favorite(db: Session, user_id: int, product_id: int):
     db.commit()
 
 
-@products.post("/favorites", status_code=201)
+@products.post("/favorites", response_model=ProductOutSimple, status_code=201)
 def create_favorite(body: FavoritesCreate, db: Session = Depends(get_db),
         current_user = Depends(auth.get_current_user)):
     try:
@@ -87,7 +87,7 @@ def create_favorite(body: FavoritesCreate, db: Session = Depends(get_db),
             raise ProductAlreadyInFavorites("Product already in favorites.")
 
         insert_favorite(db, current_user.id, body.product_id)
-        return {"detail": "Successfully added to favorites."}
+        return get_product_by_id(db, body.product_id)
     except ProductAlreadyInFavorites as error:
         raise HTTPException(status_code=409, detail=str(error))
     except Exception:
@@ -111,7 +111,7 @@ def del_favorite(db: Session, user_id: int, product_id: int):
 def delete_favorite(product_id: int, db: Session = Depends(get_db),
         current_user = Depends(auth.get_current_user)):
     try:
-        db_favorite = get_favorite(db, current_user.id, body.product_id)
+        db_favorite = get_favorite(db, current_user.id, product_id)
         if not db_favorite:
             raise ProductNotInFavorites("Product not in favorites.")
 
@@ -121,6 +121,16 @@ def delete_favorite(product_id: int, db: Session = Depends(get_db),
         raise HTTPException(status_code=409, detail=str(error))
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to delete favorite.")
+
+
+def get_recent(db: Session, user_id: int, product_id: int):
+    db_recent = db.execute(
+        recents.select()
+            .where(recents.c.user_id == user_id)
+            .where(recents.c.product_id == product_id)
+    ).first()
+
+    return db_recent
 
 
 def insert_recent(db: Session, user_id: int, product_id: int):
@@ -140,22 +150,18 @@ def upd_recent(db: Session, user_id: int, product_id: int):
     db.commit()
 
 
-@products.post("/recents", status_code=201)
+@products.post("/recents", response_model=ProductOutSimple, status_code=201)
 def create_recent(body: RecentsCreate, db: Session = Depends(get_db),
         current_user = Depends(auth.get_current_user)):
     try:
-        db_recent = db.execute(
-            recents.select()
-                .where(recents.c.user_id == current_user.id)
-                .where(recents.c.product_id == body.product_id)
-        ).first()
+        db_recent = get_recent(db, current_user.id, body.product_id)
 
         if not db_recent:
             insert_recent(db, current_user.id, body.product_id)
         else:
             upd_recent(db, current_user.id, body.product_id)
 
-        return {"detail": "Successfully added to recents."}
+        return get_product_by_id(db, body.product_id)
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to create recent.")
 
