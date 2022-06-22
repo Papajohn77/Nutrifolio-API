@@ -22,11 +22,13 @@ class UserCreate(UserBase):
     def first_name_validation(cls, first_name):
         if not first_name:
             raise ValueError('First Name is required.')
+        return first_name
 
     @validator('last_name')
     def last_name_validation(cls, last_name):
         if not last_name:
             raise ValueError('Last Name is required.')
+        return last_name
 
     @validator('email')
     def email_validation(cls, email):
