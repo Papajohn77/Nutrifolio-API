@@ -4,7 +4,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 from app.models import get_db
 from app.models.store import Store
-from app.schemas import StoreBase, StoreOut, StoreOutProduct
+from app.schemas import StoreBase, StoreOut, StoreOutProduct, SearchOut
 
 
 stores = APIRouter(
@@ -62,13 +62,13 @@ def read_store(id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Failed to load store.")
 
 
-@stores.get("/search")
+@stores.get("/search", response_model=SearchOut)
 def search_stores(q: str, lat: float, lng: float, distance: float = 3,
         skip: int = 0,  limit: int = 100, db: Session = Depends(get_db)):
     try:
         stmt = text("""
             SELECT * 
-            FROM (SELECT *, 
+            FROM (SELECT id, name, logo_url, location, 
                     (
                         (
                             (

@@ -124,6 +124,33 @@ class StoreOutProduct(StoreBase):
         orm_mode = True
 
 
+class StoreOutFilter(BaseModel):
+    id: int
+    name: str
+    logo_url: str
+
+    class Config:
+        orm_mode = True
+
+
+class StoreOutSearch(BaseModel):
+    id: int
+    name: str
+    logo_url: str
+    location: str
+    distance: float
+
+    class Config:
+        orm_mode = True
+
+
+class SearchOut(BaseModel):
+    stores: list[StoreOutSearch]
+
+    class Config:
+        orm_mode = True
+
+
 class ProductOutSimple(ProductBase):
     id: int
     store: StoreOutProduct
@@ -136,6 +163,22 @@ class ProductOutDetailed(ProductBase):
     id: int
     details: ProductDetailsOut
     store: StoreOutProduct
+
+    class Config:
+        orm_mode = True
+
+
+class ProductOutFilter(ProductBase):
+    id: int
+    distance: float
+    store: StoreOutFilter
+
+    class Config:
+        orm_mode = True
+
+
+class FilterOut(BaseModel):
+    products: list[ProductOutFilter]
 
     class Config:
         orm_mode = True

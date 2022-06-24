@@ -7,7 +7,7 @@ from app.models.product import Product
 from app.models.product_details import ProductDetails
 from app.models.recents import recents
 from app.models.favorites import favorites
-from app.schemas import ProductOutSimple, ProductOutDetailed, ProductCreate, ProductDetailsOut, ProductDetailsCreate, ProductOutStore, FavoritesOut, RecentsOut, FavoritesCreate, RecentsCreate, Filters
+from app.schemas import ProductOutSimple, ProductOutDetailed, ProductCreate, ProductDetailsOut, ProductDetailsCreate, ProductOutStore, FavoritesOut, RecentsOut, FavoritesCreate, RecentsCreate, Filters, FilterOut
 from app.utils import auth
 
 
@@ -166,7 +166,7 @@ def create_recent(body: RecentsCreate, db: Session = Depends(get_db),
         raise HTTPException(status_code=500, detail="Failed to create recent.")
 
 
-@products.post("/filter")
+@products.post("/filter", response_model=FilterOut)
 def filter_products(filters: Filters, skip: int = 0, 
         limit: int = 100, db: Session = Depends(get_db)):
     try:
