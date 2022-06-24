@@ -1,6 +1,6 @@
 from typing import Optional
 from pydantic import BaseModel, validator
-from email_validator import validate_email, EmailNotValidError
+from email_validator import validate_email
 
 
 class Token(BaseModel):
@@ -69,21 +69,12 @@ class ProductDetailsOut(BaseModel):
         orm_mode = True
 
 
-class ProductDetailsCreate(ProductDetailsOut):
-    product_id: int
-
-
 class ProductBase(BaseModel):
     name: str
     description: str
     image_url: str
     calories: int
     price: float
-
-
-class ProductCreate(ProductBase):
-    category: str
-    store_id: int
 
 
 class ProductOutStore(ProductBase):
