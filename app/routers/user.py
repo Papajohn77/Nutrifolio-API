@@ -80,10 +80,6 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Failed to signup")
 
 
-@users.get("/users/{id}", response_model=UserOut)
-def read_user(id: int, current_user = Depends(auth.get_current_user)):
-    if current_user.id != id:
-        raise HTTPException(
-            status_code=403, 
-            detail="You don't have permission to access this resource.")
+@users.get("/user_info", response_model=UserOut)
+def read_user(current_user = Depends(auth.get_current_user)):
     return current_user
